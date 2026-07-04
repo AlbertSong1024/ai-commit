@@ -2,9 +2,9 @@
 
 import subprocess
 import sys
+import os
 from typing import Optional
 
-from openai import OpenAI
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -39,6 +39,95 @@ def get_git_status() -> str:
         sys.exit(1)
 
 
+def generate_with_openai(diff: str, style: str, language: str,
+                         api_key: str, model: str, max_tokens: int) -> str:
+    """Generate commit message using OpenAI API."""
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        
+        system_prompt = _build_system_prompt(style, language)
+        
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Here is the git diff:\n\n```\n{diff}\n```"}
+            ],
+            max_tokens=max_tokens,
+            temperature=0.3
+        )
+        return response.choices[0].message.content.strip()
+    except ImportError:
+        console.print("[red]Error: openai package not installed. Run: pip install openai[/red]")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]OpenAI API error: {e}[/red]")
+        sys.exit(1)
+
+
+def generate_with_ollama(diff: str, style: str, language: str,
+                         model: str = "llama3", base_url: str = "http://localhost:11434") -> str:
+    """Generate commit message using local Ollama model."""
+    try:
+        import requests
+        
+        system_prompt = _build_system_prompt(style, language)
+        
+        response = requests.post(
+            f"{base_url}/api/chat",
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Here is the git diff:\n\n```\n{diff}\n```"}
+                ],
+                "stream": False
+            },
+            timeout=60
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data["message"]["content"].strip()
+    except ImportError:
+        console.print("[red]Error: requests package not installed. Run: pip install requests[/red]")
+        sys.exit(1)
+    except requests.exceptions.ConnectionError:
+        console.print("[red]Error: Cannot connect to Ollama. Is it running?[/red]")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]Ollama error: {e}[/red]")
+        sys.exit(1)
+
+
+def _build_system_prompt(style: str, language: str) -> str:
+    """Build system prompt for commit message generation."""
+    lang_map = {"en": "English", "zh": "Chinese", "ja": "Japanese"}
+    lang = lang_map.get(language, "English")
+    
+    prompts = {
+        "conventional": (
+            f"You are a professional developer. Generate a conventional commit message in {lang}. "
+            f"Format: type(scope): description\n"
+            f"Types: feat, fix, docs, style, refactor, test, chore, perf\n"
+            f"Keep it concise (under 72 chars)."
+        ),
+        "simple": (
+            f"You are a professional developer. Generate a simple commit message in {lang}. "
+            f"One line, imperative mood, under 50 chars."
+        ),
+        "detailed": (
+            f"You are a professional developer. Generate a detailed commit message in {lang}. "
+            f"Include a subject line and a body explaining what and why."
+        ),
+        "emoji": (
+            f"You are a professional developer. Generate a commit message with emojis in {lang}. "
+            f"Use appropriate emojis for the type of change."
+        )
+    }
+    return prompts.get(style, prompts["conventional"])
+
+
 def generate_commit_message(
     diff: str,
     style: str = "conventional",
@@ -46,86 +135,47 @@ def generate_commit_message(
     api_key: Optional[str] = None,
     model: str = "gpt-4o-mini",
     max_tokens: int = 150,
+    use_local: bool = False,
+    ollama_model: str = "llama3",
+    ollama_base_url: str = "http://localhost:11434",
 ) -> str:
-    """Generate commit message using OpenAI API."""
+    """Generate commit message using AI.
+    
+    Args:
+        diff: Git diff output
+        style: Commit message style
+        language: Output language
+        api_key: OpenAI API key
+        model: Model name
+        max_tokens: Max tokens for response
+        use_local: Use local Ollama instead of OpenAI
+        ollama_model: Ollama model name
+        ollama_base_url: Ollama API base URL
+    """
+    if use_local:
+        return generate_with_ollama(diff, style, language, ollama_model, ollama_base_url)
+    
     if not api_key:
-        import os
         api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            console.print(
-                "[red]Error: OPENAI_API_KEY not set. "
-                "Set it via environment variable or --api-key flag.[/red]"
-            )
-            sys.exit(1)
-
-    client = OpenAI(api_key=api_key)
-
-    style_prompts = {
-        "conventional": (
-            "Write a conventional commit message (type(scope): description). "
-            "Use types: feat, fix, docs, style, refactor, test, chore, perf, ci, build."
-        ),
-        "simple": "Write a simple, concise commit message.",
-        "detailed": (
-            "Write a detailed commit message with a short summary line, "
-            "blank line, and bullet points explaining the changes."
-        ),
-        "emoji": (
-            "Write a commit message starting with an appropriate emoji. "
-            "Format: emoji: description"
-        ),
-    }
-
-    lang_prompt = "Write in English." if language == "en" else f"Write in {language}."
-
-    prompt = f"""Analyze the following git diff and generate a commit message.
-
-{style_prompts.get(style, style_prompts['conventional'])}
-{lang_prompt}
-
-Rules:
-- Be concise but descriptive
-- Focus on WHY the change was made, not just WHAT
-- Use imperative mood (e.g., "add" not "added")
-- Keep first line under 72 characters
-- Don't include any prefixes like "Commit message:"
-
-Git diff:
-```
-{diff[:4000]}
-```"""
-
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a helpful assistant that generates "
-                        "high-quality git commit messages. "
-                        "Respond ONLY with the commit message, no explanations."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=max_tokens,
-            temperature=0.3,
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        console.print(f"[red]Error calling OpenAI API: {e}[/red]")
+    
+    if not api_key:
+        console.print("[red]Error: No API key provided. Set OPENAI_API_KEY or use --local[/red]")
         sys.exit(1)
+    
+    return generate_with_openai(diff, style, language, api_key, model, max_tokens)
 
 
-def commit_changes(message: str) -> bool:
-    """Commit staged changes with the given message."""
+def commit_changes(message: str, all: bool = False) -> bool:
+    """Stage and commit changes with the given message."""
     try:
-        result = subprocess.run(
-            ["git", "commit", "-m", message],
-            capture_output=True, text=True, check=True
-        )
-        console.print("[green]✓ Changes committed successfully![/green]")
+        if all:
+            subprocess.run(["git", "add", "-A"], check=True)
+        else:
+            subprocess.run(["git", "add", "."], check=True)
+        
+        cmd = ["git", "commit", "-m", message]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        console.print(f"[green]✓ Committed: {message}[/green]")
         return True
     except subprocess.CalledProcessError as e:
         console.print(f"[red]Error committing: {e.stderr}[/red]")
@@ -141,3 +191,25 @@ def display_diff_preview(diff: str, max_lines: int = 30) -> None:
 
     syntax = Syntax(preview, "diff", theme="monokai", line_numbers=False)
     console.print(Panel(syntax, title="Git Diff Preview", border_style="blue"))
+
+
+def check_ollama_available(base_url: str = "http://localhost:11434") -> bool:
+    """Check if Ollama is running and available."""
+    try:
+        import requests
+        response = requests.get(f"{base_url}/api/tags", timeout=5)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+def list_available_models(base_url: str = "http://localhost:11434") -> list:
+    """List available Ollama models."""
+    try:
+        import requests
+        response = requests.get(f"{base_url}/api/tags", timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        return [m["name"] for m in data.get("models", [])]
+    except Exception:
+        return []
