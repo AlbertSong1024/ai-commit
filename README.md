@@ -1,208 +1,76 @@
-# 🤖 ai-commit
+# AI Commit
 
-[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.0-orange.svg)]()
+> Automatically generate Git commit messages using AI
 
-> Automatically generate meaningful Git commit messages using AI (OpenAI).
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![PyPI version](https://img.shields.io/pypi/v/ai-commit.svg)](https://pypi.org/project/ai-commit/)
 
-## ✨ Features
+## Features
 
-- 🚀 **AI-Powered** - Uses OpenAI GPT models to generate high-quality commit messages
-- 🎨 **Multiple Styles** - Conventional commits, simple, detailed, or emoji style
-- 🌍 **Multi-language** - Generate commit messages in any language
-- 📊 **Diff Preview** - See what changes will be committed before generating
-- ⚡ **Fast** - Generate commit messages in seconds
-- 🔧 **CLI Interface** - Easy to use from command line
-- 📦 **Pip Installable** - Install with a single command
+- **AI-Powered**: Generate commit messages with OpenAI or local Ollama models
+- **Multiple Styles**: conventional, simple, detailed, emoji
+- **Local Support**: Use Ollama for offline commit message generation
+- **Multi-Language**: Support English, Chinese, Japanese
+- **Auto Commit**: One-click commit with generated message
+- **Preview**: See diff before generating
 
-## 📦 Installation
-
-### From PyPI (recommended)
+## Installation
 
 ```bash
 pip install ai-commit
 ```
 
-### From source
+## Usage
+
+### Cloud Mode (OpenAI)
 
 ```bash
-git clone https://github.com/AlbertSong1024/ai-commit.git
-cd ai-commit
-pip install -e .
-```
-
-### Dependencies
-
-- Python 3.8+
-- OpenAI API key
-
-## 🔧 Setup
-
-1. Get an OpenAI API key from [platform.openai.com](https://platform.openai.com/api-keys)
-
-2. Set the API key:
-
-```bash
-export OPENAI_API_KEY="sk-your-api-key"
-```
-
-Or add it to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):
-
-```bash
-echo 'export OPENAI_API_KEY="sk-your-api-key"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-## 🚀 Usage
-
-### Basic Usage
-
-```bash
-# Stage your changes
-git add .
-
 # Generate commit message
 ai-commit
 
-# Generate and auto-commit
+# Auto-commit
 ai-commit --commit
-```
 
-### Command Options
-
-```bash
-ai-commit [OPTIONS]
-
-Options:
-  --style, -s TEXT     Commit message style: conventional, simple, detailed, emoji
-                       [default: conventional]
-  --language, -l TEXT  Language for commit message [default: en]
-  --api-key, -k TEXT   OpenAI API key (or set OPENAI_API_KEY env var)
-  --model, -m TEXT     OpenAI model to use [default: gpt-4o-mini]
-  --commit, -c         Auto-commit after generating message
-  --preview, -p        Show diff preview before generating [default: True]
-  --all, -a            Stage all changes before generating
-  --version            Show version
-  --help               Show this message and exit
-```
-
-### Examples
-
-```bash
-# Generate with conventional commit style
-ai-commit --style conventional
-
-# Generate with emoji style
+# Emoji style
 ai-commit --style emoji
 
-# Generate in Chinese
-ai-commit --language "Chinese"
-
-# Generate in Japanese
-ai-commit --language "Japanese"
-
-# Use a specific model
-ai-commit --model gpt-4o
-
-# Stage all and commit
-ai-commit --all --commit
+# Chinese language
+ai-commit --language zh
 ```
 
-## 📝 Commit Styles
-
-### Conventional Commits (default)
-
-```
-feat(auth): add user login functionality
-
-- Implement JWT token generation
-- Add login endpoint
-- Add password hashing
-```
-
-### Simple
-
-```
-Add user login functionality
-```
-
-### Detailed
-
-```
-Add user login functionality
-
-- Implement JWT token generation
-- Add login endpoint with validation
-- Add bcrypt password hashing
-- Add login form component
-```
-
-### Emoji
-
-```
-✨ Add user login functionality
-```
-
-## 📖 Examples
-
-### Example 1: Simple change
+### Local Mode (Ollama)
 
 ```bash
-$ git add README.md
-$ ai-commit
+# Install Ollama: https://ollama.ai
+ollama pull llama3
 
-┌─ Git Diff Preview ─────────────────────────┐
-│ diff --git a/README.md b/README.md         │
-│ index 1234567..89abcde 100644              │
-│ --- a/README.md                            │
-│ +++ b/README.md                            │
-│ @@ -1,3 +1,5 @@                            │
-│  # My Project                              │
-│ +## Features                                │
-│ +- Feature 1                               │
-└────────────────────────────────────────────┘
+# List available models
+ai-commit --list-models
 
-┌─ Generated Commit Message ─────────────────┐
-│ docs: add features section to README       │
-└────────────────────────────────────────────┘
+# Use local model
+ai-commit --local
 
-Do you want to commit with this message? [y/N]: y
-✓ Changes committed successfully!
+# Specify model
+ai-commit --local --ollama-model mistral
 ```
 
-### Example 2: With emoji style
+## Configuration
 
+Set your OpenAI API key:
 ```bash
-$ ai-commit --style emoji --commit
-📝 Update documentation with new features
-✓ Changes committed successfully!
+export OPENAI_API_KEY=your-key-here
 ```
 
-## 🤝 Contributing
+## Styles
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+| Style | Example |
+|-------|---------|
+| conventional | `feat(auth): add OAuth2 login` |
+| simple | `add user authentication` |
+| detailed | `feat(auth): add OAuth2 login\\n\nImplemented OAuth2 login flow with Google and GitHub providers.` |
+| emoji | `✨ feat(auth): add OAuth2 login` |
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`ai-commit`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## License
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [OpenAI](https://openai.com/) for the amazing API
-- [Click](https://click.palletsprojects.com/) for the CLI framework
-- [Rich](https://rich.readthedocs.io/) for beautiful terminal output
-
-## 📧 Contact
-
-- GitHub: [@AlbertSong1024](https://github.com/AlbertSong1024)
-
----
-
-Made with ❤️ by [AlbertSong1024](https://github.com/AlbertSong1024)
+MIT
