@@ -3,15 +3,16 @@
 import click
 from rich.console import Console
 from rich.panel import Panel
-from rich.text import Text
 
 from . import __version__
 from .core import (
+    check_ollama_available,
     commit_changes,
     display_diff_preview,
     generate_commit_message,
     get_git_diff,
     get_git_status,
+    list_available_models,
 )
 
 console = Console()
@@ -55,103 +56,102 @@ console = Console()
     is_flag=True,
     help="Stage all changes before generating",
 )
+@click.option(
+    "--local/--cloud", "-L/-C",
+    default=False,
+    help="Use local Ollama model instead of OpenAI",
+)
+@click.option(
+    "--ollama-model",
+    default=None,
+    help="Ollama model to use (auto-detected if not specified)",
+)
+@click.option(
+    "--ollama-url",
+    default="http://localhost:11434",
+    help="Ollama API base URL (default: http://localhost:11434)",
+)
+@click.option(
+    "--list-models",
+    is_flag=True,
+    help="List available Ollama models and exit",
+)
 def main(
-    style: str,
-    language: str,
-    api_key: str,
-    model: str,
-    commit: bool,
-    preview: bool,
-    all: bool,
+    style,
+    language,
+    api_key,
+    model,
+    commit,
+    preview,
+    all,
+    local,
+    ollama_model,
+    ollama_url,
+    list_models,
 ):
     """Generate AI-powered Git commit messages.
 
     Examples:
 
-        ai-commit                    # Generate with conventional style
-
-        ai-commit --style emoji      # Generate with emoji style
-
-        ai-commit --commit           # Generate and auto-commit
-
-        ai-commit --language zh      # Generate in Chinese
+        ai-commit                          # Generate commit message
+        ai-commit --commit                  # Auto-commit
+        ai-commit --style emoji             # Emoji style
+        ai-commit --local                   # Use Ollama
+        ai-commit --list-models             # List available models
     """
-    # Stage all changes if requested
-    if all:
-        import subprocess
-        subprocess.run(["git", "add", "-A"], capture_output=True)
-
-    # Get git status
-    status = get_git_status()
-    if not status.strip():
-        console.print("[yellow]No changes to commit.[/yellow]")
+    if list_models:
+        if check_ollama_available(ollama_url):
+            models = list_available_models(ollama_url)
+            if models:
+                console.print("[bold green]Available Ollama models:[/bold green]")
+                for m in models:
+                    console.print(f"  - {m}")
+            else:
+                console.print("[yellow]No models pulled yet. Run: ollama pull llama3[/yellow]")
+        else:
+            console.print("[red]Ollama is not running. Start it with: ollama serve[/red]")
         return
 
-    # Get git diff
-    diff = get_git_diff(staged=True)
+    diff = get_git_diff(staged=all)
     if not diff.strip():
-        console.print(
-            "[yellow]No staged changes found. "
-            "Use 'git add' to stage changes or use --all flag.[/yellow]"
-        )
+        console.print("[yellow]No changes to commit. Use --all to stage all changes.[/yellow]")
         return
 
-    # Show diff preview
     if preview:
         display_diff_preview(diff)
 
-    # Generate commit message
-    with console.status("[bold green]Generating commit message..."):
-        message = generate_commit_message(
-            diff=diff,
-            style=style,
-            language=language,
-            api_key=api_key,
-            model=model,
-        )
-
-    # Display generated message
-    console.print()
-    console.print(
-        Panel(
-            Text(message, style="bold green"),
-            title="Generated Commit Message",
-            border_style="green",
-        )
+    console.print("\n[bold blue]Generating commit message...[/bold blue]")
+    
+    if local:
+        if not check_ollama_available(ollama_url):
+            console.print("[red]Ollama is not running. Use --cloud or start Ollama.[/red]")
+            return
+        if not ollama_model:
+            models = list_available_models(ollama_url)
+            if models:
+                ollama_model = models[0]
+                console.print(f"[yellow]Using first available model: {ollama_model}[/yellow]")
+            else:
+                console.print("[red]No models available. Run: ollama pull llama3[/red]")
+                return
+        console.print(f"[dim]Using local model: {ollama_model}[/dim]")
+    
+    msg = generate_commit_message(
+        diff=diff,
+        style=style,
+        language=language,
+        api_key=api_key,
+        model=model,
+        use_local=local,
+        ollama_model=ollama_model or "llama3",
+        ollama_base_url=ollama_url,
     )
 
-    # Auto-commit if requested
+    console.print(f"\n[bold green]Generated message:[/bold green]")
+    console.print(Panel(msg, border_style="green"))
+
     if commit:
-        commit_changes(message)
-    else:
-        # Ask user if they want to commit
-        if click.confirm("\nDo you want to commit with this message?"):
-            commit_changes(message)
-        else:
-            # Print message for easy copy
-            console.print("\n[dim]Copy this message:[/dim]")
-            console.print(f"[bold]{message}[/bold]")
-
-
-@click.command()
-def status():
-    """Show current git status."""
-    status = get_git_status()
-    if status.strip():
-        console.print(Panel(status, title="Git Status", border_style="blue"))
-    else:
-        console.print("[green]Working tree is clean.[/green]")
-
-
-@click.group()
-def cli():
-    """AI-powered Git commit message generator."""
-    pass
-
-
-cli.add_command(main, "generate")
-cli.add_command(main)  # Default command
-cli.add_command(status, "status")
+        commit_changes(msg, all=all)
 
 
 if __name__ == "__main__":
